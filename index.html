@@ -1,0 +1,355 @@
+```html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FireGuard IoT</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 25px;
+  background: #f1f5f9;
+  font-family: Arial, sans-serif;
+  color: #17243b;
+}
+
+.container {
+  max-width: 1050px;
+  margin: auto;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+h1 { font-size: 25px; }
+
+.sub {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.connection {
+  background: white;
+  padding: 10px 15px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.hero {
+  background: linear-gradient(120deg, #173f88, #2563eb);
+  color: white;
+  padding: 25px;
+  border-radius: 16px;
+  margin: 25px 0;
+}
+
+.hero h2 {
+  font-size: 27px;
+  margin: 8px 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+.card {
+  background: white;
+  padding: 22px;
+  border-radius: 15px;
+  box-shadow: 0 3px 12px #0000000a;
+}
+
+.card p {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.value {
+  font-size: 25px;
+  font-weight: bold;
+  margin: 12px 0;
+}
+
+.green { color: #16a36a; }
+.red { color: #dc2626; }
+.blue { color: #2563eb; }
+
+.history { margin-top: 20px; }
+
+.history-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+}
+
+.error {
+  color: #dc2626;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+footer {
+  text-align: center;
+  color: #94a3b8;
+  margin-top: 30px;
+  font-size: 12px;
+}
+
+@media(max-width:600px) {
+  body { padding: 15px; }
+  .grid { grid-template-columns: 1fr; }
+  header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<header>
+  <div>
+    <h1>🔥 FireGuard IoT</h1>
+    <div class="sub">Monitoring Pendeteksi Api Otomatis</div>
+  </div>
+
+  <div class="connection" id="connection">
+    ⚪ Menghubungkan...
+  </div>
+</header>
+
+<div class="hero">
+  <div>STATUS SISTEM</div>
+  <h2 id="mainStatus">Menunggu Data...</h2>
+  <div id="message">Menunggu pembacaan sensor Arduino</div>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <p>🔥 SENSOR API KY-026</p>
+    <div class="value green" id="flame">--</div>
+    <small>Status pendeteksian api</small>
+  </div>
+
+  <div class="card">
+    <p>💧 POMPA AIR</p>
+    <div class="value blue" id="pump">--</div>
+    <small>Status relay dan pompa</small>
+  </div>
+
+  <div class="card">
+    <p>📟 NILAI SENSOR DIGITAL</p>
+    <div class="value" id="raw">--</div>
+    <small>Output digital sensor</small>
+  </div>
+
+  <div class="card">
+    <p>📡 ESP32</p>
+    <div class="value blue" id="device">MENUNGGU</div>
+    <small id="lastUpdate">Belum menerima data</small>
+  </div>
+
+</div>
+
+<div class="card history">
+  <h3>📋 Riwayat Pendeteksian</h3>
+  <div id="history">Belum ada data.</div>
+</div>
+
+<div id="errorMessage" class="error"></div>
+
+<footer>
+  FireGuard IoT | Arduino UNO + ESP32
+</footer>
+
+</div>
+
+<script>
+// =====================================
+// 1. KONFIGURASI FIREBASE
+// =====================================
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCntevJbeWZ6pP7RmFM33-_77xrcffuX6Y",
+  authDomain: "dasar-telekomunikasi.firebaseapp.com",
+  databaseURL: "https://dasar-telekomunikasi-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "dasar-telekomunikasi",
+  storageBucket: "dasar-telekomunikasi.firebasestorage.app",
+  messagingSenderId: "878680852765",
+  appId: "1:878680852765:web:125dcf6afa47bf53ad79f4",
+  measurementId: "G-REGER5KB75"
+};
+
+// =====================================
+// 2. INISIALISASI FIREBASE
+// =====================================
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.database();
+
+const connection = document.getElementById("connection");
+const errorMessage = document.getElementById("errorMessage");
+
+// =====================================
+// 3. FUNGSI PEMBACAAN DATA
+// =====================================
+
+function isActive(value) {
+  return value === true || value === 1 || value === "1";
+}
+
+function showError(message) {
+  errorMessage.textContent = message;
+}
+
+// =====================================
+// 4. STATUS KONEKSI FIREBASE
+// =====================================
+
+db.ref(".info/connected").on("value", snap => {
+  const connected = snap.val() === true;
+
+  connection.textContent = connected
+    ? "🟢 Firebase Terhubung"
+    : "🔴 Firebase Terputus";
+});
+
+// =====================================
+// 5. MEMBACA DATA TERBARU
+// =====================================
+
+db.ref("fire_monitor/latest").on("value", snap => {
+
+  const d = snap.val();
+
+  if (!d) {
+    document.getElementById("mainStatus").textContent =
+      "Belum Ada Data";
+
+    document.getElementById("device").textContent =
+      "MENUNGGU";
+
+    document.getElementById("lastUpdate").textContent =
+      "Menunggu data dari ESP32";
+
+    return;
+  }
+
+  const flame = isActive(d.flameDetected);
+  const pump = isActive(d.pumpOn);
+
+  // Sensor api
+  document.getElementById("flame").textContent =
+    flame ? "API TERDETEKSI" : "AMAN";
+
+  document.getElementById("flame").className =
+    "value " + (flame ? "red" : "green");
+
+  // Pompa
+  document.getElementById("pump").textContent =
+    pump ? "MENYALA" : "MATI";
+
+  document.getElementById("pump").className =
+    "value " + (pump ? "blue" : "green");
+
+  // Status utama
+  document.getElementById("mainStatus").textContent =
+    flame ? "⚠ API TERDETEKSI!" : "KONDISI AMAN";
+
+  document.getElementById("message").textContent =
+    flame
+      ? "Periksa kondisi area dan pompa."
+      : "Tidak ada api terdeteksi.";
+
+  // Nilai sensor
+  document.getElementById("raw").textContent =
+    d.sensorRaw ?? "--";
+
+  // Status perangkat dan waktu
+  document.getElementById("device").textContent =
+    "ONLINE";
+
+  document.getElementById("lastUpdate").textContent =
+    d.timestamp
+      ? "Pembaruan: " + new Date(d.timestamp).toLocaleString("id-ID")
+      : "Data diterima";
+});
+
+// =====================================
+// 6. MEMBACA RIWAYAT PENDETEKSIAN
+// =====================================
+
+db.ref("fire_monitor/logs")
+  .limitToLast(15)
+  .on("value", snap => {
+
+    const history = document.getElementById("history");
+    history.innerHTML = "";
+
+    const records = [];
+
+    snap.forEach(child => {
+      records.push(child.val());
+    });
+
+    records.reverse();
+
+    if (records.length === 0) {
+      history.textContent = "Belum ada riwayat.";
+      return;
+    }
+
+    records.forEach(d => {
+
+      const item = document.createElement("div");
+      item.className = "history-item";
+
+      const flame = isActive(d.flameDetected);
+      const pump = isActive(d.pumpOn);
+
+      const date = d.timestamp
+        ? new Date(d.timestamp).toLocaleString("id-ID")
+        : "Waktu tidak tersedia";
+
+      item.textContent =
+        (flame ? "🔥 API TERDETEKSI" : "✅ AMAN") +
+        " | Pompa: " + (pump ? "ON" : "OFF") +
+        " | " + date;
+
+      history.appendChild(item);
+    });
+});
+
+// =====================================
+// 7. MENANGANI ERROR FIREBASE
+// =====================================
+
+db.ref("fire_monitor/latest").on("value", null, error => {
+  showError("Gagal membaca data terbaru: " + error.message);
+});
+
+db.ref("fire_monitor/logs").on("value", null, error => {
+  showError("Gagal membaca riwayat: " + error.message);
+});
+
+</script>
+</body>
+</html>
+```
